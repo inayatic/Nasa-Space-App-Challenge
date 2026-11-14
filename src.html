@@ -72,7 +72,7 @@ a{color:var(--earth)}
         <p class="note" style="margin-top:0">Click a dot (or any spot on the map) to set the chosen site. Map covers latitudes -80° to -90°; 0° longitude is at the top, east runs clockwise.</p>
         <div id="cmp"></div>
         <div class="legend" style="flex-direction:column;gap:4px"><span><i style="background:var(--both)"></i>Sun up and Earth in view</span><span><i style="background:var(--sun)"></i>Sun only (no link)</span><span><i style="background:var(--earth)"></i>Earth only (no power)</span><span><i style="background:#05070d;border:1px solid var(--line)"></i>Neither</span></div>
-        <p class="note">Shading uses a smooth sphere with no terrain shadows. Real crater walls change this; use the horizon slider to approximate them.</p>
+        <p class="note">Base image: LRO WAC mosaic (NASA/GSFC/Arizona State University) from NASA Moon Trek. Colours use a smooth sphere with no terrain shadows. Real crater walls change this; use the horizon slider to approximate them.</p>
       </div>
     </div>
     <div class="timebar"><button id="play" aria-label="Play">▶ Play</button><input id="scrub" type="range" min="0" value="0" aria-label="Time"><span id="tlabel"></span></div>
@@ -104,7 +104,7 @@ a{color:var(--earth)}
   </section>
 
   <section class="note">
-    <b>How it works.</b> Sun and Moon positions come from <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a> (MIT licence). The Moon's orientation uses the IAU/WGCCRE rotation model with libration terms (Archinal et al. 2011); our sub-Earth point matches Astronomy Engine's libration to 0.03°. Elevations are for a point on the surface of a 1737.4 km sphere, with the Sun's upper edge counted as lit.
+    <b>How it works.</b> Sun and Moon positions come from <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a> (MIT licence); the map background is the LRO WAC mosaic from NASA Moon Trek (NASA/GSFC/Arizona State University). The Moon's orientation uses the IAU/WGCCRE rotation model with libration terms (Archinal et al. 2011); our sub-Earth point matches Astronomy Engine's libration to 0.03°. Elevations are for a point on the surface of a 1737.4 km sphere, with the Sun's upper edge counted as lit.
     <br><b>Limits.</b> Site coordinates are approximate crater and massif locations. Terrain is only the single horizon angle you choose, not a real LOLA horizon map, so treat results as planning-level, not mission-grade. All times UTC.
   </section>
 </main>
@@ -220,6 +220,10 @@ function setPick(m) { pick = m; $('pa').classList.toggle('on', m === 'A'); $('pb
 function setSite(i) { if (pick === 'A') sel = i; else selB = i; renderTable(); renderDetail(); }
 // south polar stereographic, 0° lon up, east clockwise, edge = -80°
 const T5 = Math.tan(5 * D2R), proj = (lat, lon, R) => { const r = Math.tan((90 + lat) * D2R / 2) / T5 * R; return [r * Math.sin(lon * D2R), -r * Math.cos(lon * D2R)]; };
+// NASA Moon Trek: LRO WAC mosaic, south-pole tiles, zoom 3 (rows/cols 2-5 cover the map). Same stereographic geometry as proj().
+const NB = document.createElement('canvas'); NB.width = NB.height = 1024; let nasaOK = false;
+const TILE = 'https://trek.nasa.gov/tiles/Moon/SP/LRO_WAC_Mosaic_SPole60_100mp/1.0.0/default/default028mm/3/';
+for (let r = 2; r < 6; r++) for (let c = 2; c < 6; c++) { const im = new Image(); im.onload = () => { NB.getContext('2d').drawImage(im, (c - 2) * 256, (r - 2) * 256); nasaOK = true; drawMap(); }; im.src = TILE + r + '/' + c + '.png'; }
 const buf = document.createElement('canvas'); buf.width = buf.height = 180;
 function drawMap() {
   if (!eph.length) return;
@@ -228,10 +232,10 @@ function drawMap() {
     const dx = (a + .5) / N * 2 - 1, dy = (b + .5) / N * 2 - 1, rr = Math.hypot(dx, dy), o = (b * N + a) * 4; if (rr > 1) continue;
     const lat = -(90 - 2 * Math.atan(rr * T5) / D2R), lon = Math.atan2(dx, -dy) / D2R, bs = siteBasis(lat, lon);
     const S = look(bs, e.sun)[0] + SUN_R > hz, E = look(bs, e.earth)[0] > hz;
-    im.data.set(S && E ? [61, 220, 151, 190] : S ? [245, 184, 61, 170] : E ? [74, 163, 255, 170] : [5, 7, 13, 240], o);
+    im.data.set(S && E ? [61, 220, 151, 110] : S ? [245, 184, 61, 100] : E ? [74, 163, 255, 100] : [5, 7, 13, 150], o);
   }
   bg.putImageData(im, 0, 0);
-  g.save(); g.beginPath(); g.arc(cx, cy, R, 0, 7); g.clip(); g.imageSmoothingEnabled = true; g.drawImage(buf, cx - R, cy - R, 2 * R, 2 * R); g.restore();
+  g.save(); g.beginPath(); g.arc(cx, cy, R, 0, 7); g.clip(); g.imageSmoothingEnabled = true; g.fillStyle = '#05070d'; g.fillRect(0, 0, w, h); if (nasaOK) g.drawImage(NB, 227.8, 227.8, 568.4, 568.4, cx - R, cy - R, 2 * R, 2 * R); g.drawImage(buf, cx - R, cy - R, 2 * R, 2 * R); g.restore();
   g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.fillStyle = C.mut; g.textAlign = 'center';
   [-88, -85, -82].forEach(l => { const r = proj(l, 0, R)[1] * -1; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke(); g.fillText(-l + '°S', cx, cy - r - 2); });
   for (let l = 0; l < 360; l += 45) { const [x, y] = proj(-80, l, R); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + x, cy + y); g.stroke(); const [lx, ly] = proj(-80, l, R + 10); g.fillText(l + '°', cx + lx, cy + ly + 4); }
