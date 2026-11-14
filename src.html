@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Polar Window</title>
+<meta name="description" content="Compare Moon south-pole landing sites and dates: when is the Sun up, when is Earth in view, and when are both.">
+<style>
+:root{--bg:#0b0f1a;--panel:#141b2d;--line:#26314d;--text:#e6ebf5;--mut:#9aa9c6;--sun:#f5b83d;--earth:#4aa3ff;--both:#3ddc97}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+h1{margin:0;font-size:28px;letter-spacing:-.5px} h1 span{color:var(--sun)}
+.tag{margin:4px 0 16px;color:var(--mut)}
+h2{font-size:15px;margin:0 0 8px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
+input,select,button{font:inherit;color:var(--text);background:#0e1424;border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+input[type=range]{padding:0;width:100%;accent-color:var(--sun)}
+button{cursor:pointer} button:hover{border-color:var(--sun)}
+.num{width:84px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--mut);cursor:pointer;user-select:none} th:hover{color:var(--text)}
+tbody tr{cursor:pointer} tbody tr:hover,tbody tr:focus{background:#1b2540;outline:none}
+tbody tr.sel{background:#223056;box-shadow:inset 3px 0 var(--sun)}
+.bar{display:inline-block;height:8px;width:var(--v);max-width:70px;min-width:2px;border-radius:4px;margin-right:6px;background:var(--c)}
+.bar+b{font-weight:600}
+.verdict{font-size:17px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:1fr 300px;gap:14px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}}
+canvas{width:100%;display:block}
+#tl{height:320px}#dial{height:280px}#daily{height:120px}#map{aspect-ratio:1;max-height:520px;margin:auto;cursor:crosshair;touch-action:manipulation}
+.maprow{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}@media(max-width:800px){.maprow{grid-template-columns:1fr}}
+.timebar{display:flex;gap:10px;align-items:center;margin-top:10px}.timebar input{flex:1}#tlabel{min-width:150px;font-size:13px;color:var(--mut)}
+.pick{display:flex;gap:8px;margin-bottom:10px}.pick button{flex:1}.pick button.on{border-color:var(--sun);background:#223056}
+#cmp table{min-width:0}#cmp th{cursor:default}#cmp td,#cmp th{padding:5px 8px;white-space:normal}
+tbody tr.selb{box-shadow:inset 3px 0 var(--earth)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
+.read{font-size:13px;color:var(--mut);text-align:center;margin-top:6px}
+small,.note{color:var(--mut);font-size:12.5px}
+a{color:var(--earth)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Polar <span>Window</span></h1>
+  <p class="tag">Lunar south pole: when is the Sun up, when can you see Earth, and when do you get both? Pick sites and dates, get the answer in seconds.</p>
+
+  <section class="panel">
+    <div class="controls">
+      <label>Start date (UTC)<input id="start" type="date"></label>
+      <label>Span<select id="days"><option>7</option><option>14</option><option selected>30</option><option>60</option><option>90</option></select></label>
+      <label style="min-width:200px;flex:1 1 200px">Local horizon (terrain) <b id="hzv" style="color:var(--text)">0°</b>
+        <input id="hz" type="range" min="0" max="8" step="0.5" value="0" aria-label="Local horizon elevation in degrees"></label>
+      <label>Custom site: lat / lon (°E)
+        <span><input id="clat" class="num" type="number" step="0.1" min="-90" max="90" value="-86.5" aria-label="Latitude"> <input id="clon" class="num" type="number" step="0.1" min="-360" max="360" value="20" aria-label="Longitude">
+        <button id="add">Add</button></span></label>
+    </div>
+    <p class="note" style="margin:10px 0 0">The horizon slider stands in for hills and crater walls: anything lower than this angle is hidden. Click a column to sort; click a row to set site A or B (choose above the map).</p>
+  </section>
+
+  <section class="panel">
+    <h2>South pole map: drag the clock</h2>
+    <div class="maprow">
+      <div><canvas id="map" role="img" aria-label="Map of the lunar south pole showing where the Sun and Earth are above the horizon"></canvas></div>
+      <div>
+        <div class="pick" role="group" aria-label="Which site to set"><button id="pa" class="on">Set site A</button><button id="pb">Set site B</button></div>
+        <p class="note" style="margin-top:0">Click a dot (or any spot on the map) to set the chosen site. Map covers latitudes -80° to -90°; 0° longitude is at the top, east runs clockwise.</p>
+        <div id="cmp"></div>
+        <div class="legend" style="flex-direction:column;gap:4px"><span><i style="background:var(--both)"></i>Sun up and Earth in view</span><span><i style="background:var(--sun)"></i>Sun only (no link)</span><span><i style="background:var(--earth)"></i>Earth only (no power)</span><span><i style="background:#05070d;border:1px solid var(--line)"></i>Neither</span></div>
+        <p class="note">Shading uses a smooth sphere with no terrain shadows. Real crater walls change this; use the horizon slider to approximate them.</p>
+      </div>
+    </div>
+    <div class="timebar"><button id="play" aria-label="Play">▶ Play</button><input id="scrub" type="range" min="0" value="0" aria-label="Time"><span id="tlabel"></span></div>
+  </section>
+
+  <section class="panel">
+    <h2>Compare sites</h2>
+    <div class="tablewrap"><table>
+      <thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <h2 id="sitename"></h2>
+    <p class="verdict" id="verdict"></p>
+    <div class="grid">
+      <div>
+        <canvas id="tl" role="img" aria-label="Sun and Earth elevation over time"></canvas>
+        <div class="legend"><span><i style="background:var(--sun)"></i>Sun</span><span><i style="background:var(--earth)"></i>Earth</span><span><i style="background:var(--both)"></i>Both above horizon (power + direct link)</span><span>Solid lines: site A. Dashed: site B.</span></div>
+      </div>
+      <div>
+        <canvas id="dial" role="img" aria-label="Sky view of Sun and Earth"></canvas>
+        <div class="read" id="read"></div>
+      </div>
+    </div>
+    <h2 style="margin-top:16px">Hours per day with Sun and Earth both up</h2>
+    <canvas id="daily" role="img" aria-label="Daily hours with both Sun and Earth up"></canvas>
+    <p class="note" id="best"></p>
+  </section>
+
+  <section class="note">
+    <b>How it works.</b> Sun and Moon positions come from <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a> (MIT licence). The Moon's orientation uses the IAU/WGCCRE rotation model with libration terms (Archinal et al. 2011); our sub-Earth point matches Astronomy Engine's libration to 0.03°. Elevations are for a point on the surface of a 1737.4 km sphere, with the Sun's upper edge counted as lit.
+    <br><b>Limits.</b> Site coordinates are approximate crater and massif locations. Terrain is only the single horizon angle you choose, not a real LOLA horizon map, so treat results as planning-level, not mission-grade. All times UTC.
+  </section>
+</main>
+<script>/*ASTRONOMY*/</script>
+<script>/*CORE*/</script>
+<script>
+const $ = id => document.getElementById(id), C = { sun: '#f5b83d', earth: '#4aa3ff', both: '#3ddc97', mut: '#9aa9c6', line: '#26314d' };
+let sites = [
+  { name: 'Shackleton rim', lat: -89.9, lon: 129.8 }, { name: 'Connecting ridge', lat: -89.45, lon: -137.3 },
+  { name: 'de Gerlache rim', lat: -88.5, lon: -87.1 }, { name: 'Haworth rim', lat: -87.5, lon: -5 },
+  { name: 'Faustini rim', lat: -87.3, lon: 77 }, { name: 'Malapert massif', lat: -85.9, lon: 2.9 },
+  { name: 'Nobile rim', lat: -85.2, lon: 53.5 }, { name: 'Cabeus', lat: -84.9, lon: -35.5 }, { name: 'Amundsen rim', lat: -84.5, lon: 82.8 }];
+let sel = 0, selB = 1, pick = 'A', timer = 0, sortKey = 'both', sortDir = -1, eph = [], hz = 0, start = 0, days = 30;
+const COLS = [['name', 'Site'], ['sun', 'Sun up'], ['earth', 'Earth in view'], ['both', 'Both'], ['breaks', 'Link breaks'], ['dark', 'Longest darkness'], ['out', 'Longest no Earth']];
+const fmtH = h => h >= 48 ? (h / 24).toFixed(1) + ' d' : h + ' h';
+const fmtD = ms => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const fmtT = ms => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+const pct = v => Math.round(v * 100) + '%';
+const sunUp = p => p.sun + SUN_R > hz, earthUp = p => p.earth > hz;
+
+function run(full) {
+  hz = +$('hz').value; $('hzv').textContent = hz + '°';
+  if (full) {
+    start = Date.parse($('start').value + 'T00:00:00Z'); days = +$('days').value;
+    if (isNaN(start)) return;
+    eph = ephemeris(start, days * 24); $('scrub').max = eph.length - 1; $('scrub').value = 0;
+    sites.forEach(s => s.series = evalSite(s, eph));
+  }
+  sites.forEach(s => s.m = metrics(s.series, hz));
+  renderTable(); renderDetail();
+}
+function renderTable() {
+  $('thead').innerHTML = COLS.map(([k, t]) => `<th data-k="${k}">${t}${k === sortKey ? (sortDir < 0 ? ' ▼' : ' ▲') : ''}</th>`).join('');
+  const val = s => sortKey === 'name' ? s.name : s.m[sortKey];
+  const order = sites.map((s, i) => i).sort((a, b) => {
+    const x = val(sites[a]), y = val(sites[b]);
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+  const bar = (v, c) => `<td><span class="bar" style="--v:${v * 70}px;--c:${c}"></span><b>${pct(v)}</b></td>`;
+  $('tbody').innerHTML = order.map(i => { const s = sites[i], m = s.m;
+    return `<tr tabindex="0" data-i="${i}" class="${i === sel ? 'sel' : i === selB ? 'selb' : ''}"><td>${s.name}<br><small>${s.lat.toFixed(2)}°, ${s.lon.toFixed(1)}°E</small></td>${bar(m.sun, C.sun)}${bar(m.earth, C.earth)}${bar(m.both, C.both)}<td>${m.breaks}</td><td>${fmtH(m.dark)}</td><td>${fmtH(m.out)}</td></tr>`; }).join('');
+}
+function daily(s) {
+  const out = [];
+  for (let d = 0; d < days; d++) out.push(s.series.slice(d * 24, d * 24 + 24).filter(p => sunUp(p) && earthUp(p)).length);
+  return out;
+}
+function renderDetail() {
+  const s = sites[sel], m = s.m;
+  $('sitename').textContent = s.name;
+  $('verdict').innerHTML = `Sun is up <b style="color:var(--sun)">${pct(m.sun)}</b> of the time, Earth is in view <b style="color:var(--earth)">${pct(m.earth)}</b>, and both together <b style="color:var(--both)">${pct(m.both)}</b>. Longest darkness: ${fmtH(m.dark)}. Longest stretch without Earth: ${fmtH(m.out)}.`;
+  const d = daily(s);
+  let txt = `Best day: ${fmtD(start + d.indexOf(Math.max(...d)) * 864e5)} (${Math.max(...d)} h).`;
+  if (days >= 7) { let bi = 0, bs = -1, cur = d.slice(0, 7).reduce((a, b) => a + b, 0);
+    for (let i = 0; i + 7 <= days; i++) { if (i) cur += d[i + 6] - d[i - 1]; if (cur > bs) { bs = cur; bi = i; } }
+    txt += ` Best 7-day window starts ${fmtD(start + bi * 864e5)}: ${Math.round(bs / 1.68)}% of the time with both up.`; }
+  $('best').textContent = txt;
+  drawTL(); drawDial(); drawDaily(d); renderCmp(); drawMap();
+}
+function cv(id) { const c = $(id), r = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight; c.width = w * r; c.height = h * r; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); g.font = '12px system-ui'; return [g, w, h]; }
+function runs(series, f, x, g, y, hh, col) { // fill spans where f is true
+  g.fillStyle = col; let a = -1;
+  series.forEach((p, i) => { const on = f(p); if (on && a < 0) a = i; if ((!on || i === series.length - 1) && a >= 0) { g.fillRect(x(a), y, Math.max(1, x(on ? i : i - 1) - x(a)), hh); a = -1; } });
+}
+function drawTL() {
+  const s = sites[sel], [g, w, h] = cv('tl'), L = 112, R = 8, n = s.series.length, x = i => L + (w - L - R) * i / (n - 1);
+  const sB = sites[selB], both = p => sunUp(p) && earthUp(p);
+  [['Sun up (A)', C.sun, sunUp, s], ['Earth in view (A)', C.earth, earthUp, s], ['Both: A', C.both, both, s], ['Both: B', C.both, both, sB]].forEach(([t, col, f, ss], k) => {
+    const y = 4 + k * 18; g.fillStyle = '#0e1424'; g.fillRect(L, y, w - L - R, 13); runs(ss.series, f, x, g, y, 13, col);
+    g.fillStyle = C.mut; g.textAlign = 'right'; g.fillText(t, L - 8, y + 11); });
+  const top = 86, bot = h - 22, ymin = -10, ymax = Math.max(10, Math.ceil(Math.max(...s.series.map(p => Math.max(p.sun, p.earth))) + 1));
+  const y = v => bot - (Math.min(ymax, Math.max(ymin, v)) - ymin) / (ymax - ymin) * (bot - top);
+  g.textAlign = 'right'; g.strokeStyle = C.line; g.lineWidth = 1;
+  for (let v = ymin; v <= ymax; v += 5) { g.beginPath(); g.moveTo(L, y(v)); g.lineTo(w - R, y(v)); g.stroke(); g.fillStyle = C.mut; g.fillText(v + '°', L - 8, y(v) + 4); }
+  g.strokeStyle = '#fff'; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(L, y(hz)); g.lineTo(w - R, y(hz)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText('horizon', L + 4, y(hz) - 4);
+  [['sun', C.sun], ['earth', C.earth]].forEach(([k, col]) => { g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); s.series.forEach((p, i) => i ? g.lineTo(x(i), y(p[k])) : g.moveTo(x(i), y(p[k]))); g.stroke(); });
+  g.setLineDash([3, 3]); g.lineWidth = 1.5; [['sun', C.sun], ['earth', C.earth]].forEach(([k, col]) => { g.strokeStyle = col; g.beginPath(); sB.series.forEach((p, i) => i ? g.lineTo(x(i), y(p[k])) : g.moveTo(x(i), y(p[k]))); g.stroke(); }); g.setLineDash([]);
+  g.fillStyle = C.mut; g.textAlign = 'center'; const st = Math.ceil(days / Math.max(2, Math.floor(w / 75)));
+  for (let d = 0; d < days; d += st) g.fillText(fmtD(start + d * 864e5), x(d * 24), h - 6);
+  const cx = x(+$('scrub').value); g.strokeStyle = '#fff'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, bot); g.stroke();
+}
+function drawDial() {
+  const s = sites[sel], i = +$('scrub').value, p = s.series[i], [g, w, h] = cv('dial'), cx = w / 2, cy = h / 2, R = Math.min(cx, cy) - 18, E0 = -4, E1 = 14;
+  const rad = e => R * (E1 - Math.min(E1, Math.max(E0, e))) / (E1 - E0);
+  g.fillStyle = '#0e1424'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+  g.fillStyle = '#05070d'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.moveTo(cx + rad(hz), cy); g.arc(cx, cy, rad(hz), 0, 7); g.fill('evenodd'); // below-horizon band
+  g.strokeStyle = C.line; g.lineWidth = 1;
+  [0, 5, 10].forEach(e => { g.beginPath(); g.arc(cx, cy, rad(e), 0, 7); g.stroke(); g.fillStyle = C.mut; g.textAlign = 'left'; g.fillText(e + '°', cx + 3, cy - rad(e) + 12); });
+  g.strokeStyle = '#fff'; g.setLineDash([5, 4]); g.beginPath(); g.arc(cx, cy, rad(hz), 0, 7); g.stroke(); g.setLineDash([]);
+  g.fillStyle = C.mut; g.textAlign = 'center'; [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([t, a]) => g.fillText(t, cx + (R + 10) * Math.sin(a * D2R), cy - (R + 10) * Math.cos(a * D2R) + 4));
+  const dot = (e, az, col, lab, r) => { const q = rad(e), X = cx + q * Math.sin(az * D2R), Y = cy - q * Math.cos(az * D2R);
+    g.fillStyle = col; g.beginPath(); g.arc(X, Y, r, 0, 7); g.fill(); g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(lab, X + r + 3, Y + 4); };
+  dot(p.earth, p.earthAz, C.earth, 'Earth', 6); dot(p.sun, p.sunAz, C.sun, 'Sun', 8);
+  $('read').innerHTML = `${fmtT(eph[i].ms)}<br>Sun ${p.sun.toFixed(1)}° ${sunUp(p) ? '✔ up' : '✘ down'} · Earth ${p.earth.toFixed(1)}° ${earthUp(p) ? '✔ in view' : '✘ hidden'}`;
+}
+function drawDaily(d) {
+  const [g, w, h] = cv('daily'), L = 28, bw = (w - L) / d.length, y = v => h - 18 - v / 24 * (h - 28);
+  g.fillStyle = C.mut; g.textAlign = 'right'; [0, 12, 24].forEach(v => g.fillText(v, L - 4, y(v) + 4));
+  g.fillStyle = C.both; d.forEach((v, i) => g.fillRect(L + i * bw + 1, y(v), Math.max(1, bw - 2), h - 18 - y(v)));
+  g.fillStyle = C.mut; g.textAlign = 'center'; const st = Math.ceil(days / Math.max(2, Math.floor(w / 75)));
+  for (let i = 0; i < days; i += st) g.fillText(fmtD(start + i * 864e5), L + (i + .5) * bw, h - 3);
+}
+$('thead').onclick = e => { const k = e.target.dataset.k; if (!k) return; sortDir = k === sortKey ? -sortDir : -1; sortKey = k; renderTable(); };
+$('tbody').onclick = e => { const r = e.target.closest('tr'); if (r) { setSite(+r.dataset.i); } };
+$('tbody').onkeydown = e => { if (e.key === 'Enter') e.target.click(); };
+const tick = () => { $('tlabel').textContent = fmtT(eph[+$('scrub').value].ms); drawTL(); drawDial(); drawMap(); };
+$('scrub').oninput = tick;
+$('play').onclick = () => { if (timer) { clearInterval(timer); timer = 0; $('play').textContent = '▶ Play'; return; }
+  $('play').textContent = '❚❚ Pause'; timer = setInterval(() => { const s = $('scrub'); s.value = +s.value >= +s.max ? 0 : +s.value + 2; tick(); }, 60); };
+$('pa').onclick = () => setPick('A'); $('pb').onclick = () => setPick('B');
+function setPick(m) { pick = m; $('pa').classList.toggle('on', m === 'A'); $('pb').classList.toggle('on', m === 'B'); }
+function setSite(i) { if (pick === 'A') sel = i; else selB = i; renderTable(); renderDetail(); }
+// south polar stereographic, 0° lon up, east clockwise, edge = -80°
+const T5 = Math.tan(5 * D2R), proj = (lat, lon, R) => { const r = Math.tan((90 + lat) * D2R / 2) / T5 * R; return [r * Math.sin(lon * D2R), -r * Math.cos(lon * D2R)]; };
+const buf = document.createElement('canvas'); buf.width = buf.height = 180;
+function drawMap() {
+  if (!eph.length) return;
+  const e = eph[+$('scrub').value], [g, w, h] = cv('map'), cx = w / 2, cy = h / 2, R = Math.min(cx, cy) - 14, N = 180, bg = buf.getContext('2d'), im = bg.createImageData(N, N);
+  for (let a = 0; a < N; a++) for (let b = 0; b < N; b++) {
+    const dx = (a + .5) / N * 2 - 1, dy = (b + .5) / N * 2 - 1, rr = Math.hypot(dx, dy), o = (b * N + a) * 4; if (rr > 1) continue;
+    const lat = -(90 - 2 * Math.atan(rr * T5) / D2R), lon = Math.atan2(dx, -dy) / D2R, bs = siteBasis(lat, lon);
+    const S = look(bs, e.sun)[0] + SUN_R > hz, E = look(bs, e.earth)[0] > hz;
+    im.data.set(S && E ? [61, 220, 151, 190] : S ? [245, 184, 61, 170] : E ? [74, 163, 255, 170] : [5, 7, 13, 240], o);
+  }
+  bg.putImageData(im, 0, 0);
+  g.save(); g.beginPath(); g.arc(cx, cy, R, 0, 7); g.clip(); g.imageSmoothingEnabled = true; g.drawImage(buf, cx - R, cy - R, 2 * R, 2 * R); g.restore();
+  g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.fillStyle = C.mut; g.textAlign = 'center';
+  [-88, -85, -82].forEach(l => { const r = proj(l, 0, R)[1] * -1; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke(); g.fillText(-l + '°S', cx, cy - r - 2); });
+  for (let l = 0; l < 360; l += 45) { const [x, y] = proj(-80, l, R); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + x, cy + y); g.stroke(); const [lx, ly] = proj(-80, l, R + 10); g.fillText(l + '°', cx + lx, cy + ly + 4); }
+  sites.forEach((s, i) => { if (s.lat > -80) return; const [x, y] = proj(s.lat, s.lon, R), tag = i === sel ? 'A' : i === selB ? 'B' : '';
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(cx + x, cy + y, tag ? 6 : 3.5, 0, 7); g.fill();
+    if (tag) { g.strokeStyle = tag === 'A' ? C.sun : C.earth; g.lineWidth = 3; g.stroke(); g.fillStyle = '#000'; g.font = 'bold 9px system-ui'; g.fillText(tag, cx + x, cy + y + 3); g.font = '12px system-ui'; }
+    g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(s.name.replace(/ (rim|massif|ridge)$/, ''), cx + x + 9, cy + y + 4); g.textAlign = 'center'; });
+}
+$('map').onclick = ev => {
+  const c = $('map'), R = Math.min(c.clientWidth, c.clientHeight) / 2 - 14, dx = ev.offsetX - c.clientWidth / 2, dy = ev.offsetY - c.clientHeight / 2;
+  let best = -1, bd = 16; sites.forEach((s, i) => { const [x, y] = proj(s.lat, s.lon, R), d = Math.hypot(x - dx, y - dy); if (d < bd) { bd = d; best = i; } });
+  if (best < 0) { const rr = Math.hypot(dx, dy) / R; if (rr > 1) return;
+    const lat = +(-(90 - 2 * Math.atan(rr * T5) / D2R)).toFixed(2), lon = +(Math.atan2(dx, -dy) / D2R).toFixed(1), s = { name: 'Custom ' + lat + ', ' + lon, lat, lon };
+    s.series = evalSite(s, eph); s.m = metrics(s.series, hz); sites.push(s); best = sites.length - 1; }
+  setSite(best);
+};
+function renderCmp() {
+  const A = sites[sel], B = sites[selB], r = (l, f) => `<tr><th>${l}</th><td>${f(A.m)}</td><td>${f(B.m)}</td></tr>`;
+  const better = A.m.breaks !== B.m.breaks ? (A.m.breaks < B.m.breaks ? 'A' : 'B') : (A.m.both >= B.m.both ? 'A' : 'B'), W = better === 'A' ? A : B, L = better === 'A' ? B : A;
+  $('cmp').innerHTML = `<table><thead><tr><th></th><th style="color:var(--sun)">A</th><th style="color:var(--earth)">B</th></tr></thead><tbody>
+    <tr><th>Site</th><td>${A.name}</td><td>${B.name}</td></tr>${r('Both up', m => pct(m.both))}${r('Link breaks', m => m.breaks)}${r('Longest darkness', m => fmtH(m.dark))}</tbody></table>
+    <p class="note"><b>${better}</b> (${W.name}) is steadier: ${W.m.breaks} link break(s) vs ${L.m.breaks}, both up ${pct(W.m.both)} vs ${pct(L.m.both)}.</p>`;
+}
+$('start').onchange = $('days').onchange = () => run(true);
+$('hz').oninput = () => run(false);
+$('hz').addEventListener('input', () => $('tlabel').textContent = fmtT(eph[+$('scrub').value].ms));
+$('add').onclick = () => {
+  const lat = +$('clat').value, lon = +$('clon').value;
+  if (!(lat >= -90 && lat <= 90 && lon >= -360 && lon <= 360)) return alert('Latitude must be -90..90, longitude -360..360');
+  const s = { name: 'Custom ' + lat + ', ' + lon, lat, lon }; s.series = evalSite(s, eph); sites.push(s); s.m = metrics(s.series, hz); setSite(sites.length - 1);
+};
+addEventListener('resize', () => renderDetail());
+$('start').value = new Date().toISOString().slice(0, 10);
+run(true); tick();
+</script>
+</body>
+</html>
